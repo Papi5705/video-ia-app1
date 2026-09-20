@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Générateur de vidéos IA</title>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --accent:#7c5cff; --text:#eaeaf0; --muted:#9a9db0; --ok:#3ddc84; --err:#ff5c6c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding: 28px 20px 12px; text-align:center; }
+  header h1 { margin:0 0 6px; font-size: 1.6rem; }
+  header p { margin:0; color: var(--muted); font-size: 0.95rem; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px; }
+  form { display:flex; flex-direction:column; gap:10px; background:var(--card); padding:18px; border-radius:14px; }
+  textarea { resize: vertical; min-height: 80px; background:#0f1115; color:var(--text); border:1px solid #2a2e3a; border-radius:10px; padding:12px; font-size:1rem; }
+  button { background: var(--accent); color:white; border:none; padding:12px 18px; border-radius:10px; font-size:1rem; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:14px; margin-top: 24px; }
+  .card { background:var(--card); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:8px; }
+  .status { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; }
+  .status.queued, .status.processing { color: var(--accent); }
+  .status.completed { color: var(--ok); }
+  .status.failed { color: var(--err); }
+  .prompt { font-size:0.85rem; color:var(--muted); min-height: 2.4em; }
+  video { width:100%; border-radius:10px; background:black; }
+  .placeholder { aspect-ratio:9/16; background:#0f1115; border-radius:10px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:0.8rem; }
+  a.download { color: var(--accent); font-size:0.8rem; text-decoration:none; }
+  .empty { text-align:center; color:var(--muted); margin-top: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 Générateur de vidéos IA</h1>
+  <p>Décrivez la vidéo que vous voulez, l'appli s'occupe du reste — même si vous fermez cette page.</p>
+</header>
+<main>
+  <form id="form">
+    <textarea id="prompt" placeholder="Ex : Un plan cinématique d'un café qui fume sur une table en bois, lumière du matin, ambiance chaleureuse..."></textarea>
+    <button type="submit" id="submitBtn">Générer la vidéo</button>
+  </form>
+
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" style="display:none;">Aucune vidéo pour l'instant — lancez votre première génération ci-dessus.</div>
+</main>
+
+<script>
+const form = document.getElementById('form');
+const promptEl = document.getElementById('prompt');
+const submitBtn = document.getElementById('submitBtn');
+const grid = document.getElementById('grid');
+const emptyEl = document.getElementById('empty');
+
+const STATUS_LABEL = { queued: 'En attente', processing: 'En cours', completed: 'Terminée', failed: 'Échec' };
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const prompt = promptEl.value.trim();
+  if (!prompt) return;
+  submitBtn.disabled = true;
+  try {
+    const res = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erreur');
+    promptEl.value = '';
+    await refresh();
+  } catch (err) {
+    alert('Erreur : ' + err.message);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+function cardHTML(job) {
+  const media = job.status === 'completed' && job.videoUrl
+    ? `<video controls src="${job.videoUrl}"></video><a class="download" href="${job.videoUrl}" download>⬇ Télécharger</a>`
+    : `<div class="placeholder">${job.status === 'failed' ? (job.error || 'Échec') : '⏳ Génération en cours…'}</div>`;
+  return `
+    <div class="card">
+      <span class="status ${job.status}">${STATUS_LABEL[job.status] || job.status}</span>
+      <div class="prompt">${job.prompt}</div>
+      ${media}
+    </div>`;
+}
+
+async function refresh() {
+  const res = await fetch('/api/jobs');
+  const jobs = await res.json();
+  emptyEl.style.display = jobs.length ? 'none' : 'block';
+  grid.innerHTML = jobs.map(cardHTML).join('');
+}
+
+refresh();
+setInterval(refresh, 3000); // rafraîchit automatiquement la galerie
+</script>
+</body>
+</html>
