@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Générateur de vidéos IA</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🎬 Générateur de vidéos IA</h1>
+    <p class="subtitle">Décrivez la vidéo que vous voulez, on s'occupe du reste — même après avoir fermé cette page.</p>
+    <p id="mode-badge" class="badge">Vérification du mode…</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Nouvelle demande</h2>
+      <form id="job-form">
+        <textarea
+          id="prompt-input"
+          placeholder="Ex : Un plan cinématique le long d'une route côtière ensoleillée, caméra qui avance lentement"
+          rows="3"
+          required
+        ></textarea>
+        <button type="submit" id="submit-btn">Générer la vidéo</button>
+        <p id="form-error" class="error"></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Galerie</h2>
+      <p id="empty-state" class="empty-state">Aucune demande pour l'instant.</p>
+      <div id="gallery" class="gallery"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
