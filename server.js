@@ -162,11 +162,12 @@ async function processJob(id) {
     }),
   });
 
-  const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    console.error('Réponse brute Higgsfield (erreur) :', JSON.stringify(data));
     throw new Error(
-      data.error || data.message || `Erreur API Higgsfield (HTTP ${response.status})`
+      data.detail || data.error || data.message || `Erreur API Higgsfield (HTTP ${response.status})`
     );
   }
 
