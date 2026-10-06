@@ -239,4 +239,9 @@ app.listen(PORT, () => {
   console.log(
     `Serveur démarré sur le port ${PORT} — MOCK_MODE=${MOCK_MODE ? 'true (simulation)' : 'false (réel)'}`
   );
+  if (!MOCK_MODE) {
+    console.log(
+      `Diagnostic HF_API_KEY : ${HF_API_KEY ? 'présente, longueur=' + HF_API_KEY.length + ', débute par "' + HF_API_KEY.slice(0, 4) + '", finit par "' + HF_API_KEY.slice(-4) + '"' : 'ABSENTE'}`
+    );
+  }
 });
