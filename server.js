@@ -1,4 +1,6 @@
 // server.js — Générateur de vidéos IA (texte -> vidéo) via l'API Higgsfield
+// Authentification : une seule clé API complète, copiée depuis open.higgsfield.ai
+// Format d'en-tête : Authorization: Key <clé complète>  (pas de ":" à ajouter)
 
 const express = require('express');
 const fs = require('fs');
@@ -9,8 +11,7 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const MOCK_MODE = process.env.MOCK_MODE !== 'false'; // true par défaut
-const HF_API_KEY = process.env.HF_API_KEY;
-const HF_API_SECRET = process.env.HF_API_SECRET;
+const HF_API_KEY = process.env.HF_API_KEY; // clé complète copiée depuis open.higgsfield.ai
 const PUBLIC_URL = process.env.PUBLIC_URL;
 const HF_MODEL_ID = process.env.HF_MODEL_ID || 'bytedance/seedance-2.5/text-to-video';
 
@@ -126,6 +127,38 @@ app.post('/webhook/higgsfield', (req, res) => {
   res.status(200).send('ok');
 });
 
+// Interroge périodiquement le statut d'une requête (filet de sécurité si le
+// webhook n'arrive pas, par ex. en local sans URL publique).
+async function pollStatus(id, requestId, attempt = 0) {
+  if (attempt > 40) return; // ~10 minutes max (40 x 15s)
+  await new Promise((r) => setTimeout(r, 15000));
+
+  const current = loadJobs().find((j) => j.id === id);
+  if (!current || current.status === 'completed' || current.status === 'failed') {
+    return; // déjà résolu, probablement via webhook
+  }
+
+  try {
+    const res = await fetch(`https://api.higgsfield.ai/requests/${requestId}/status`, {
+      headers: { Authorization: `Key ${HF_API_KEY}` },
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (data.status === 'completed') {
+      updateJob(id, { status: 'completed', videoUrl: (data.video && data.video.url) || null });
+      return;
+    }
+    if (data.status === 'failed' || data.status === 'nsfw' || data.status === 'canceled') {
+      updateJob(id, { status: 'failed', error: data.error || data.detail || 'Échec de la génération.' });
+      return;
+    }
+  } catch (err) {
+    console.error('Erreur de polling :', err.message);
+  }
+
+  pollStatus(id, requestId, attempt + 1);
+}
+
 async function processJob(id) {
   updateJob(id, { status: 'processing' });
   const job = loadJobs().find((j) => j.id === id);
@@ -135,20 +168,20 @@ async function processJob(id) {
     return mockProcess(id);
   }
 
-  if (!HF_API_KEY || !HF_API_SECRET) {
-    throw new Error('HF_API_KEY et/ou HF_API_SECRET manquant(s) dans les variables d\'environnement.');
-  }
-  if (!PUBLIC_URL) {
-    throw new Error('PUBLIC_URL manquant : nécessaire pour recevoir le webhook Higgsfield.');
+  if (!HF_API_KEY) {
+    throw new Error('HF_API_KEY manquant dans les variables d\'environnement.');
   }
 
-  const webhookUrl = `${PUBLIC_URL.replace(/\/$/, '')}/webhook/higgsfield`;
-  const endpoint = `https://api.higgsfield.ai/${HF_MODEL_ID}?hf_webhook=${encodeURIComponent(webhookUrl)}`;
+  let endpoint = `https://api.higgsfield.ai/${HF_MODEL_ID}`;
+  if (PUBLIC_URL) {
+    const webhookUrl = `${PUBLIC_URL.replace(/\/$/, '')}/webhook/higgsfield`;
+    endpoint += `?hf_webhook=${encodeURIComponent(webhookUrl)}`;
+  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: `Key ${HF_API_KEY}:${HF_API_SECRET}`,
+      Authorization: `Key ${HF_API_KEY}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
@@ -162,7 +195,7 @@ async function processJob(id) {
     }),
   });
 
-    const data = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     console.error('Réponse brute Higgsfield (erreur) :', JSON.stringify(data));
@@ -175,6 +208,12 @@ async function processJob(id) {
     requestId: data.request_id || null,
     status: data.status || 'queued',
   });
+
+  // Filet de sécurité : si le webhook n'arrive jamais (ex: PUBLIC_URL absent
+  // ou injoignable), on vérifie quand même le statut régulièrement.
+  if (data.request_id) {
+    pollStatus(id, data.request_id);
+  }
 }
 
 function mockProcess(id) {
